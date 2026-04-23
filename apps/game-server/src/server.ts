@@ -2,7 +2,6 @@ import { createServer, type Server } from "node:http"
 import { WebSocketServer, type WebSocket } from "ws"
 
 export interface ServerDeps {
-  port: number
   onWsConnection?: (ws: WebSocket) => void
 }
 
@@ -18,11 +17,19 @@ export function createGameServer(deps: ServerDeps): { server: Server; close: () 
   })
 
   const wss = new WebSocketServer({ server, path: "/mcp" })
-  wss.on("connection", (ws) => deps.onWsConnection?.(ws))
+  wss.on("connection", (ws) => {
+    try {
+      deps.onWsConnection?.(ws)
+    } catch (err) {
+      console.error("onWsConnection threw:", err)
+      ws.close(1011, "internal error")
+    }
+  })
 
   return {
     server,
     close: () => new Promise<void>((resolve, reject) => {
+      for (const client of wss.clients) client.terminate()
       wss.close(() => server.close((err) => err ? reject(err) : resolve()))
     }),
   }

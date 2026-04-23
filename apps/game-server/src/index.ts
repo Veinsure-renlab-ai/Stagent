@@ -3,7 +3,7 @@ import { createGameServer, listen } from "./server.js"
 
 async function main() {
   const config = loadConfig()
-  const { server } = createGameServer({ port: config.port })
+  const { server } = createGameServer({})
   await listen(server, config.port)
   console.log(`game-server listening on :${config.port}`)
 }

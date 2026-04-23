@@ -3,8 +3,8 @@ import { createGameServer, listen } from "../src/server.js"
 
 describe("game-server smoke", () => {
   it("starts and responds to /health", async () => {
-    const { server, close } = createGameServer({ port: 0 })    // 0 = random free port
-    await listen(server, 0)
+    const { server, close } = createGameServer({})
+    await listen(server, 0)    // 0 = random free port
     const addr = server.address()
     const port = typeof addr === "object" && addr ? addr.port : 0
     const res = await fetch(`http://localhost:${port}/health`)
