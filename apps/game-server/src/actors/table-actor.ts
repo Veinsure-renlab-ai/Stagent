@@ -23,14 +23,23 @@ export type TableCmd =
   | { kind: "snapshot_viewer" }
   | { kind: "snapshot_agent"; agent_id: AgentId }
   | { kind: "turn_timeout_fired"; seat_idx: number }
+  | { kind: "say"; agent_id: AgentId; text: string }
+  | { kind: "think"; agent_id: AgentId; text: string }
+  | { kind: "tag"; agent_id: AgentId; label: string }
 
 type TableResult = unknown
+
+const TURN_BUDGET_MS = Number(process.env.TURN_BUDGET_MS ?? 30000)
 
 export class TableActor extends Actor<TableCmd, TableResult> {
   state: TexasHoldemState | null = null      // null while waiting for first 2 seats
   private currentHandId: string | null = null
   private handNo = 0
   private waiters: Map<AgentId, (r: unknown) => void> = new Map()
+  private turnTimer: NodeJS.Timeout | null = null
+  private droppedSince: Map<AgentId, number> = new Map()
+  private dropTimers: Map<AgentId, NodeJS.Timeout> = new Map()
+  private readonly reconnectGraceMs = Number(process.env.RECONNECT_GRACE_MS ?? 60000)
 
   constructor(public readonly meta: TableMeta, private db: Db) {
     super()
@@ -40,8 +49,15 @@ export class TableActor extends Actor<TableCmd, TableResult> {
     switch (cmd.kind) {
       case "join":              return await this.onJoin(cmd.agent_id, cmd.seat)
       case "leave":              return await this.onLeave(cmd.agent_id)
+      case "apply_action":       return await this.onApplyAction(cmd.agent_id, cmd.action)
       case "snapshot_viewer":    return this.state ? TexasHoldemModule.redactForViewer(this.state) : null
       case "snapshot_agent":     return this.state ? TexasHoldemModule.redactForAgent(this.state, cmd.agent_id) : null
+      case "turn_timeout_fired": return await this.onTurnTimeout(cmd.seat_idx)
+      case "disconnect":         return this.onDisconnect(cmd.agent_id)
+      case "reconnect":          return this.onReconnect(cmd.agent_id)
+      case "say":                return await this.onExpression(cmd.agent_id, "say", cmd.text, false)
+      case "think":              return await this.onExpression(cmd.agent_id, "think", cmd.text, true)
+      case "tag":                return await this.onExpression(cmd.agent_id, "tag", cmd.label, false)
       default: throw new McpToolError("unknown_cmd", `not yet implemented: ${cmd.kind}`)
     }
   }
@@ -100,6 +116,186 @@ export class TableActor extends Actor<TableCmd, TableResult> {
       pot_total: state.pot_main,
     }).returning({ id: hands.id })
     this.currentHandId = row!.id
+    this.scheduleTurnTimeout()
+  }
+
+  private async onApplyAction(agent_id: AgentId, action: TexasHoldemAction): Promise<{ ok: true; next_event: string }> {
+    if (!this.state) throw new McpToolError("not_seated", "no hand in progress")
+    let result
+    try {
+      result = TexasHoldemModule.applyAction(this.state, action, agent_id)
+    } catch (e) {
+      // Persist illegal action for audit
+      if (this.currentHandId) {
+        await this.db.insert(actions).values({
+          hand_id: this.currentHandId,
+          agent_id,
+          street: this.state.street,
+          kind: "illegal",
+          text: e instanceof Error ? e.message : String(e),
+        })
+      }
+      if (e instanceof Error && /not_your_turn/i.test(e.message)) throw new McpToolError("not_your_turn", e.message)
+      if (e instanceof Error && /invalid_amount/i.test(e.message)) throw new McpToolError("invalid_amount", e.message)
+      throw new McpToolError("illegal_action", e instanceof Error ? e.message : String(e))
+    }
+    this.state = result.state
+    this.clearTurnTimer()
+    // Write an actions row for the concrete event
+    if (this.currentHandId) {
+      const street = result.state.street
+      const amount = "amount" in action ? action.amount : this.inferAmountForLog(agent_id, action.kind)
+      await this.db.insert(actions).values({
+        hand_id: this.currentHandId,
+        agent_id,
+        street,
+        kind: action.kind,
+        amount: amount ?? null,
+      })
+    }
+    // Check for showdown
+    if (this.state.street === "showdown" || this.state.to_act === null) {
+      await this.finalizeHand()
+    } else {
+      this.scheduleTurnTimeout()
+    }
+    // Resolve waiter for new to_act
+    if (this.state && this.state.to_act !== null) {
+      const nextAgent = this.state.seats[this.state.to_act]!.agent_id
+      this.resolveWaiter(nextAgent, this.buildTurnPayload(nextAgent))
+    }
+    return { ok: true, next_event: this.detectNextEvent(result.events) }
+  }
+
+  private inferAmountForLog(agent_id: AgentId, kind: string): number | undefined {
+    if (!this.state) return undefined
+    const seat = this.state.seats.find((s) => s.agent_id === agent_id)
+    if (!seat) return undefined
+    if (kind === "call") return seat.contributed_this_street
+    if (kind === "all_in") return seat.contributed_this_street
+    return undefined
+  }
+
+  private detectNextEvent(events: any[]): string {
+    const last = events[events.length - 1]
+    if (last?.kind === "hand_ended") return "hand_ended"
+    if (!this.state) return "noop"
+    if (this.state.street === "showdown") return "hand_ended"
+    if (this.state.to_act === null) return "hand_ended"
+    return "turn_ended"
+  }
+
+  private async finalizeHand(): Promise<void> {
+    if (!this.state || !this.currentHandId) return
+    this.clearTurnTimer()
+    // Get winners (we'll use a simple version for now)
+    const winners: { agent_id: string; won: number }[] = []
+    const pot_total = this.state.pot_main
+    // Find winner (simplified version)
+    const activePlayers = this.state.seats.filter(s => s.status === "active" || s.status === "all_in")
+    if (activePlayers.length === 1) {
+      winners.push({ agent_id: activePlayers[0]!.agent_id, won: pot_total })
+    } else {
+      // For now, just give pot to first player (this would need actual showdown logic)
+      if (activePlayers.length > 0) {
+        winners.push({ agent_id: activePlayers[0]!.agent_id, won: pot_total })
+      }
+    }
+    // Close current hand row
+    await this.db
+      .update(hands)
+      .set({
+        ended_at: new Date(),
+        winners,
+        pot_total,
+        board: this.state.board,
+      })
+      .where(eq(hands.id, this.currentHandId))
+    // hand_ended action log for each winner
+    for (const w of winners) {
+      await this.db.insert(actions).values({
+        hand_id: this.currentHandId,
+        agent_id: w.agent_id,
+        street: "showdown",
+        kind: "hand_ended",
+        amount: w.won,
+      })
+    }
+    this.currentHandId = null
+    this.state = null
+    // Auto-start next hand if >= 2 seated
+    await this.maybeStartHand()
+    // Wake up new to_act
+    const stateAfterMaybeStart = this.state as TexasHoldemState | null
+    if (stateAfterMaybeStart && stateAfterMaybeStart.to_act !== null) {
+      const next = stateAfterMaybeStart.seats[stateAfterMaybeStart.to_act]!.agent_id
+      this.resolveWaiter(next, this.buildTurnPayload(next))
+    }
+  }
+
+  private scheduleTurnTimeout(): void {
+    this.clearTurnTimer()
+    if (!this.state || this.state.to_act === null) return
+    const seat = this.state.seats[this.state.to_act]
+    if (!seat) return
+    this.turnTimer = setTimeout(() => {
+      this.enqueue({ kind: "turn_timeout_fired", seat_idx: seat.index }).catch(() => {})
+    }, TURN_BUDGET_MS)
+  }
+
+  private clearTurnTimer(): void {
+    if (this.turnTimer) { clearTimeout(this.turnTimer); this.turnTimer = null }
+  }
+
+  private async onTurnTimeout(seat_idx: number): Promise<void> {
+    if (!this.state || this.state.to_act !== seat_idx) return      // stale timer, ignore
+    const seat = this.state.seats[seat_idx]
+    if (!seat) return
+    const legal = TexasHoldemModule.legalActions(this.state, seat.agent_id)
+    const pick = legal.find((a) => a.kind === "check") ?? ({ kind: "fold" } as const)
+    // Log auto_timeout
+    if (this.currentHandId) {
+      await this.db.insert(actions).values({
+        hand_id: this.currentHandId,
+        agent_id: seat.agent_id,
+        street: this.state.street,
+        kind: "auto_timeout",
+        text: `auto-${pick.kind}`,
+      })
+    }
+    // Apply the chosen action
+    await this.onApplyAction(seat.agent_id, pick as TexasHoldemAction)
+  }
+
+  private onDisconnect(agent_id: AgentId): void {
+    this.droppedSince.set(agent_id, Date.now())
+    // After grace: auto-fold (if to_act) and remove from table
+    const timer = setTimeout(() => {
+      this.enqueue({ kind: "leave", agent_id }).catch(() => {})
+      this.droppedSince.delete(agent_id)
+      this.dropTimers.delete(agent_id)
+    }, this.reconnectGraceMs)
+    this.dropTimers.set(agent_id, timer)
+  }
+
+  private onReconnect(agent_id: AgentId): void {
+    const timer = this.dropTimers.get(agent_id)
+    if (timer) clearTimeout(timer)
+    this.dropTimers.delete(agent_id)
+    this.droppedSince.delete(agent_id)
+  }
+
+  private async onExpression(agent_id: AgentId, kind: "say" | "think" | "tag", text: string, thought_private: boolean): Promise<{ ok: true }> {
+    if (!this.currentHandId) throw new McpToolError("not_seated", "no hand in progress")
+    await this.db.insert(actions).values({
+      hand_id: this.currentHandId,
+      agent_id,
+      street: this.state?.street ?? "preflop",
+      kind,
+      text,
+      thought_private,
+    })
+    return { ok: true }
   }
 
   // Exposed for Task 13 (waiter map)

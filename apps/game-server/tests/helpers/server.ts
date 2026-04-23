@@ -18,9 +18,7 @@ export async function startTestServer(): Promise<TestServer> {
   const { db, close: closeDb } = createDbClient(schema.databaseUrl, schema.schemaName)
   const registry = new TableRegistry(db)
   await registry.loadAll()
-  const { server, close: closeServer } = createGameServer({
-    handle: createHandler({ db, registry }),
-  })
+  const { server, close: closeServer } = createGameServer({ db, registry })
   await listen(server, 0)
   const addr = server.address()
   const port = typeof addr === "object" && addr ? addr.port : 0

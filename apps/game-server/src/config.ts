@@ -2,6 +2,7 @@ export interface Config {
   databaseUrl: string
   port: number
   devSpawnBot: number
+  dbSearchPath: string | undefined
 }
 
 export function loadConfig(): Config {
@@ -11,5 +12,6 @@ export function loadConfig(): Config {
     databaseUrl,
     port: Number(process.env.GAME_SERVER_PORT ?? 8080),
     devSpawnBot: Number(process.env.DEV_SPAWN_BOT ?? 0),
+    dbSearchPath: process.env.DB_SEARCH_PATH,
   }
 }
