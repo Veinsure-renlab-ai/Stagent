@@ -94,3 +94,36 @@ export function rankFive(cards: [Card, Card, Card, Card, Card]): RankResult {
   }
   return { category: HandCategory.HighCard, tiebreakers: values }
 }
+
+function combinations5<T>(arr: T[]): T[][] {
+  const out: T[][] = []
+  const n = arr.length
+  for (let a = 0; a < n; a++)
+    for (let b = a + 1; b < n; b++)
+      for (let c = b + 1; c < n; c++)
+        for (let d = c + 1; d < n; d++)
+          for (let e = d + 1; e < n; e++)
+            out.push([arr[a]!, arr[b]!, arr[c]!, arr[d]!, arr[e]!])
+  return out
+}
+
+export function compareHands(a: RankResult, b: RankResult): number {
+  if (a.category !== b.category) return a.category - b.category
+  const len = Math.max(a.tiebreakers.length, b.tiebreakers.length)
+  for (let i = 0; i < len; i++) {
+    const av = a.tiebreakers[i] ?? 0
+    const bv = b.tiebreakers[i] ?? 0
+    if (av !== bv) return av - bv
+  }
+  return 0
+}
+
+export function bestOfSeven(cards: Card[]): RankResult {
+  if (cards.length < 5) throw new Error(`bestOfSeven: need >= 5 cards`)
+  let best: RankResult | null = null
+  for (const combo of combinations5(cards)) {
+    const r = rankFive(combo as [Card, Card, Card, Card, Card])
+    if (!best || compareHands(r, best) > 0) best = r
+  }
+  return best!
+}
