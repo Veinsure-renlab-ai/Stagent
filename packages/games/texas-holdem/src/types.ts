@@ -18,6 +18,11 @@ export interface Seat {
   contributed_this_street: number
   contributed_total: number
   status: "active" | "folded" | "all_in" | "sitting_out"
+  // True once the seat has taken an action in the current street.
+  // Reset every street; raise/all_in that raises current_bet resets it for others.
+  // Needed so BB preflop keeps the "option" to check/raise even when the pot
+  // already matches the big blind.
+  has_acted_this_street: boolean
 }
 
 export interface PotShare {

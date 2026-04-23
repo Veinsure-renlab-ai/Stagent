@@ -17,6 +17,7 @@ export function createTable(opts: TableOpts): TexasHoldemState {
     contributed_this_street: 0,
     contributed_total: 0,
     status: "active",
+    has_acted_this_street: false,
   }))
 
   // Deal 2 hole cards per seat
