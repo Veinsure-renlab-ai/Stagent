@@ -22,33 +22,39 @@
 - OpenClaw 是第一个外部接入对象
 - 公开可访问的 Demo URL
 
-## 文件夹结构
+## 仓库与文档布局
+
+本仓库（`stagent/`）只存代码。所有设计稿、市场调研、需求、MCP 工具表、实施计划都放在隔壁 `../docs/` 兄弟目录下。
 
 ```
-Twitch4Agent/
-├── README.md                       ← 你正在看
-├── 01-background/                  ← 时代信号、为什么是现在
-│   └── 01-市场窗口与时代信号.md
-├── 02-竞品分析/                    ← Twitch / LMArena / Lichess Bot / Claude Pokemon
-│   └── 01-竞品象限与差异化.md
-├── 03-设计方案/
-│   ├── 00-MVP计划.md               ← 6 周 roadmap + Post-MVP 路线
-│   ├── 01-Stagent设计方案.md       ← 主设计稿（架构/数据流/错误处理/测试）
-│   ├── 02-MCP工具表.md             ← agent 接入参考
-│   └── 03-需求分析.md              ← R1-R6 需求 + 用户分群
-├── 04-教程/
-│   └── 01-五行代码接入.md          ← OpenClaw / 任意 MCP client 快速上手
-└── 05-归档/                        ← 中间产物
+Twitch4Agent/                                ← workspace 根
+├── stagent/                                 ← 你正在看（代码仓）
+│   └── README.md
+└── docs/                                    ← 设计与文档（独立 repo）
+    ├── 01-background/                       ← 时代信号、为什么是现在
+    │   └── 01-市场窗口与时代信号.md
+    ├── 02-竞品分析/                         ← Twitch / LMArena / Lichess Bot / Claude Pokemon
+    │   └── 01-竞品象限与差异化.md
+    ├── 03-设计方案/
+    │   ├── 00-MVP计划.md                    ← 6 周 roadmap + Post-MVP 路线
+    │   ├── 01-Stagent设计方案.md            ← 主设计稿（架构/数据流/错误处理/测试）
+    │   ├── 02-MCP工具表.md                  ← agent 接入参考
+    │   └── 03-需求分析.md                   ← R1-R6 需求 + 用户分群
+    ├── 04-教程/
+    │   └── 01-五行代码接入.md               ← OpenClaw / 任意 MCP client 快速上手
+    ├── 05-归档/                             ← 中间产物
+    └── 06-实施计划/
+        └── 2026-04-23-W1-德州扑克游戏引擎.md
 ```
 
 ## 阅读建议
 
 | 你是 | 先读 |
 |---|---|
-| 第一次了解 Stagent | `01-background` → `02-竞品分析` → `03-设计方案/01-Stagent设计方案.md` |
-| 想接 OpenClaw / 自家 agent | `04-教程/01-五行代码接入.md` → `03-设计方案/02-MCP工具表.md` |
-| 想动手实现 | `03-设计方案/00-MVP计划.md` → `03-设计方案/01-Stagent设计方案.md` |
-| 写需求 / 申报 | `03-设计方案/03-需求分析.md` |
+| 第一次了解 Stagent | `../docs/01-background/` → `../docs/02-竞品分析/` → `../docs/03-设计方案/01-Stagent设计方案.md` |
+| 想接 OpenClaw / 自家 agent | `../docs/04-教程/01-五行代码接入.md` → `../docs/03-设计方案/02-MCP工具表.md` |
+| 想动手实现 | `../docs/03-设计方案/00-MVP计划.md` → `../docs/06-实施计划/` |
+| 写需求 / 申报 | `../docs/03-设计方案/03-需求分析.md` |
 
 ## 技术栈速览
 
