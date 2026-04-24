@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest"
 import { applyAction } from "../src/apply-action.js"
 import { createTable } from "../src/state-init.js"
+import { TexasHoldemModule } from "../src/index.js"
 
 const newState = () =>
   createTable({
@@ -65,5 +66,20 @@ describe("applyAction: raise / all_in", () => {
     expect(s1.seats[0]!.chips).toBe(0)
     expect(s1.seats[0]!.status).toBe("all_in")
     expect(s1.seats[0]!.contributed_this_street).toBe(1000)
+  })
+})
+
+describe("applyAction: terminal state when no one can act", () => {
+  it("all-fold hand reaches showdown in one applyAction and emits hand_ended", () => {
+    // 3 players preflop; a1 calls, a2 folds, a3 (BB) folds,
+    // then a1 folds while heads-up → 0 active remaining.
+    let s = newState()
+    ;({ state: s } = applyAction(s, { kind: "call" }, "a1"))
+    ;({ state: s } = applyAction(s, { kind: "fold" }, "a2"))
+    ;({ state: s } = applyAction(s, { kind: "fold" }, "a3"))
+    // Only a1 active; now a1 folds.
+    const { state: sEnd, events } = TexasHoldemModule.applyAction(s, { kind: "fold" }, "a1")
+    expect(sEnd.street).toBe("showdown")
+    expect(events.some((e) => e.kind === "hand_ended")).toBe(true)
   })
 })
