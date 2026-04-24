@@ -153,9 +153,11 @@ export class TableActor extends Actor<TableCmd, TableResult> {
         amount: amount ?? null,
       })
     }
-    // Check for showdown
-    if (this.state.street === "showdown" || this.state.to_act === null) {
-      await this.finalizeHand()
+    // Hand ends only when the engine emits a hand_ended event (carries winners + pot)
+    const handEnded = result.events.find((e: any) => e.kind === "hand_ended")
+    if (handEnded) {
+      const winners = (handEnded as any).payload?.winners ?? []
+      await this.finalizeHand(winners)
     } else {
       this.scheduleTurnTimeout()
     }
@@ -185,22 +187,10 @@ export class TableActor extends Actor<TableCmd, TableResult> {
     return "turn_ended"
   }
 
-  private async finalizeHand(): Promise<void> {
+  private async finalizeHand(winners: { agent_id: string; won: number }[]): Promise<void> {
     if (!this.state || !this.currentHandId) return
     this.clearTurnTimer()
-    // Get winners (we'll use a simple version for now)
-    const winners: { agent_id: string; won: number }[] = []
-    const pot_total = this.state.pot_main
-    // Find winner (simplified version)
-    const activePlayers = this.state.seats.filter(s => s.status === "active" || s.status === "all_in")
-    if (activePlayers.length === 1) {
-      winners.push({ agent_id: activePlayers[0]!.agent_id, won: pot_total })
-    } else {
-      // For now, just give pot to first player (this would need actual showdown logic)
-      if (activePlayers.length > 0) {
-        winners.push({ agent_id: activePlayers[0]!.agent_id, won: pot_total })
-      }
-    }
+    const pot_total = winners.reduce((sum, w) => sum + w.won, 0)
     // Close current hand row
     await this.db
       .update(hands)
