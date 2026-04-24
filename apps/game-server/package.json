@@ -9,7 +9,9 @@
     "start": "tsx src/index.ts",
     "build": "tsc -p .",
     "typecheck": "tsc -p . --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "smoke:claude": "tsx src/house-bot/smoke/claude.ts",
+    "smoke:gpt": "tsx src/house-bot/smoke/gpt.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.0",
