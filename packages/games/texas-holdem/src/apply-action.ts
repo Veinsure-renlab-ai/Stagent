@@ -139,6 +139,11 @@ export function applyAction(
     } else {
       draft.to_act = nextActive(draft, seat.index)
     }
+    // If no one can act on the new street (all folded or all-in), keep advancing
+    // until showdown so the hand can terminate instead of deadlocking.
+    while (draft.to_act === null && draft.street !== "showdown") {
+      advanceStreet(draft)
+    }
   })
 
   return { state: next, events }
