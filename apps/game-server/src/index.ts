@@ -4,6 +4,7 @@ import { createDbClient } from "./db/client.js"
 import { TableRegistry } from "./actors/table-registry.js"
 import { abortUnfinishedHands } from "./recovery.js"
 import { spawnDumbBotLoopback } from "./dev/dumb-bot-loopback.js"
+import { startHouseBotRunner, type RunnerHandle } from "./house-bot/runner.js"
 
 async function main() {
   const config = loadConfig()
@@ -21,7 +22,7 @@ async function main() {
   await listen(server, config.port)
   console.log(`game-server listening on :${config.port}`)
 
-  // Spawn dumb bots if enabled
+  // Spawn dumb bots if enabled (W2 dev helper)
   if (config.devSpawnBot > 0) {
     console.log(`Spawning ${config.devSpawnBot} dumb bots...`)
     for (let i = 0; i < config.devSpawnBot; i++) {
@@ -31,9 +32,16 @@ async function main() {
     }
   }
 
+  // Spawn house-bot runner if enabled (W3)
+  let houseBotRunner: RunnerHandle | null = null
+  if (config.houseBots.enabled) {
+    houseBotRunner = startHouseBotRunner({ db, registry, config: config.houseBots })
+  }
+
   // Graceful shutdown
   process.on("SIGTERM", async () => {
     console.log("SIGTERM received, shutting down...")
+    if (houseBotRunner) await houseBotRunner.stop()
     await closeServer()
     await closeDb()
     process.exit(0)
