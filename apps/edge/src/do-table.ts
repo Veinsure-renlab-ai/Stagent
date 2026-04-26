@@ -4,7 +4,7 @@ import { publicView } from "./state.js"
 import { advanceBotsOnly, engineSeatToDoSeat, refillBankrupt, startHand } from "./game-loop.js"
 import { broadcastEvent, handleWsUpgrade } from "./ws-handler.js"
 import { handleMcpRequest } from "./mcp-handler.js"
-import { actInput, sitDownInput } from "./mcp-schemas.js"
+import { actInput, sayInput, sitDownInput } from "./mcp-schemas.js"
 import { TexasHoldemModule } from "@stagent/texas-holdem"
 
 const STATE_KEY = "state"
@@ -193,6 +193,14 @@ export class TableDO {
           }
         }
       }
+      return { ok: true }
+    }
+
+    if (name === "say") {
+      const { text } = sayInput.parse(args)
+      const mySeat = s.seats.findIndex(seat => seat.kind === "agent" && seat.mcpSessionId === sid)
+      if (mySeat < 0) throw new Error("not_seated")
+      broadcastEvent(this.ctx, { type: "say", seat: mySeat, text })
       return { ok: true }
     }
 
