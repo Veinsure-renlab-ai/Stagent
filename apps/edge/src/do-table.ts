@@ -5,6 +5,7 @@ import { advanceBotsOnly, engineSeatToDoSeat, refillBankrupt, startHand } from "
 import { broadcastEvent, handleWsUpgrade } from "./ws-handler.js"
 import { handleMcpRequest } from "./mcp-handler.js"
 import { sitDownInput } from "./mcp-schemas.js"
+import { TexasHoldemModule } from "@stagent/texas-holdem"
 
 const STATE_KEY = "state"
 
@@ -122,6 +123,45 @@ export class TableDO {
         await this.ctx.storage.setAlarm(Date.now() + BOT_ACT_DELAY_MS)
       }
       return { seat: openIdx }
+    }
+
+    if (name === "get_state") {
+      const mySeat = s.seats.findIndex(seat => seat.kind === "agent" && seat.mcpSessionId === sid)
+      if (mySeat < 0) throw new Error("not_seated")
+
+      const me = s.seats[mySeat]
+      if (!me || me.kind !== "agent") throw new Error("not_seated")
+
+      const updated: DOState = { ...s, seats: [...s.seats] }
+      updated.seats[mySeat] = { ...me, lastSeenMs: Date.now() }
+      updated.lastActivityMs = Date.now()
+      await this.writeState(updated)
+
+      if (!updated.engine) {
+        return { phase: "waiting_for_hand", seats: updated.seats, chips: me.chips, legalActions: [] }
+      }
+
+      let myEngineIdx = -1
+      for (let i = 0; i < updated.engine.seats.length; i++) {
+        if (engineSeatToDoSeat(updated, i) === mySeat) { myEngineIdx = i; break }
+      }
+      if (myEngineIdx < 0) throw new Error("seat_mapping_error")
+      const myEngineSeat = updated.engine.seats[myEngineIdx]!
+      const by = myEngineSeat.agent_id
+      const redacted = TexasHoldemModule.redactForAgent(updated.engine, by)
+      const isMyTurn = updated.engine.to_act === myEngineIdx
+      const legal = isMyTurn ? TexasHoldemModule.legalActions(updated.engine, by) : []
+
+      return {
+        phase: updated.engine.street,
+        holeCards: myEngineSeat.hole_cards,
+        board: updated.engine.board,
+        pot: updated.engine.pot_main,
+        toCall: Math.max(0, updated.engine.current_bet - myEngineSeat.contributed_this_street),
+        chips: myEngineSeat.chips,
+        legalActions: legal,
+        engine: redacted,
+      }
     }
 
     throw new Error(`tool ${name} not implemented`)
