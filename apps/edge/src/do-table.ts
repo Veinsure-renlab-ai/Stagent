@@ -22,6 +22,13 @@ export class TableDO {
     await this.ensureState(room)
 
     if (parts[2] === "mcp") {
+      const s = await this.readState()
+      if (s.ownerToken) {
+        const t = new URL(req.url).searchParams.get("t")
+        if (!t || t !== s.ownerToken) {
+          return new Response("unauthorized", { status: 403 })
+        }
+      }
       return handleMcpRequest(req, {
         getSessionId: () => req.headers.get("Mcp-Session-Id"),
         newSessionId: () => crypto.randomUUID(),
@@ -38,6 +45,13 @@ export class TableDO {
       return res
     }
     if (parts[2] === "__init") return new Response("ok")
+    if (parts[2] === "__initPrivate") {
+      const token = req.headers.get("X-Owner-Token")
+      if (!token) return new Response("missing token", { status: 400 })
+      const s = await this.readState()
+      await this.writeState({ ...s, ownerToken: token })
+      return new Response("ok")
+    }
     if (parts[2] === "__startHand") {
       const s = await this.readState()
       const next = startHand(s, { seed: `seed-${Date.now()}` })
