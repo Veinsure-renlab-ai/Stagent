@@ -18,7 +18,10 @@ export async function handleCreateTable(req: Request, env: Env): Promise<Respons
 
   const origin = new URL(req.url).origin
   return Response.json({
+    // Absolute — agent's MCP client must hit the edge directly.
     mcpUrl: `${origin}/c/${slug}/mcp?t=${token}`,
-    watchUrl: `${origin}/c/${slug}`,
+    // Relative — web pairs with window.location.origin client-side, so it
+    // resolves to the web frontend, not the edge host.
+    watchUrl: `/c/${slug}`,
   }, { status: 201 })
 }

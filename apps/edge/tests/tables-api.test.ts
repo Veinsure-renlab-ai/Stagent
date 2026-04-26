@@ -6,8 +6,8 @@ describe("POST /api/tables", () => {
     const res = await SELF.fetch("http://edge/api/tables", { method: "POST" })
     expect(res.status).toBe(201)
     const body = await res.json<any>()
-    expect(body.mcpUrl).toMatch(/\/c\/prv-[a-z0-9]+\/mcp\?t=[a-z0-9]+/)
-    expect(body.watchUrl).toMatch(/\/c\/prv-[a-z0-9]+$/)
+    expect(body.mcpUrl).toMatch(/^https?:\/\/.+\/c\/prv-[a-z0-9]+\/mcp\?t=[a-z0-9]+/)
+    expect(body.watchUrl).toMatch(/^\/c\/prv-[a-z0-9]+$/)
   })
 
   it("private mcp requires valid token", async () => {
