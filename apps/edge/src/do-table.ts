@@ -1,5 +1,6 @@
-import { DEMO_TABLES, isDemoRoom, STARTING_CHIPS } from "./config.js"
+import { BOT_ACT_DELAY_MS, DEMO_TABLES, isDemoRoom, STARTING_CHIPS } from "./config.js"
 import type { DOState, Seat } from "./state.js"
+import { advanceBotsOnly, engineSeatToDoSeat, startHand } from "./game-loop.js"
 
 const STATE_KEY = "state"
 
@@ -16,7 +17,41 @@ export class TableDO {
     await this.ensureState(room)
 
     if (parts[2] === "__init") return new Response("ok")
+    if (parts[2] === "__startHand") {
+      const s = await this.readState()
+      const next = startHand(s, { seed: `seed-${Date.now()}` })
+      await this.writeState(next)
+      await this.ctx.storage.setAlarm(Date.now() + BOT_ACT_DELAY_MS)
+      return new Response("ok")
+    }
+    if (parts[2] === "__tick") {
+      await this.alarm()
+      return new Response("ok")
+    }
     return new Response("not implemented", { status: 501 })
+  }
+
+  async alarm(): Promise<void> {
+    const s = await this.readState()
+    if (!s.engine) return
+    const next = advanceBotsOnly(s, () => Math.random())
+
+    let after: DOState
+    if (next.engine?.street === "showdown") {
+      after = startHand(next, { seed: `seed-${Date.now()}-${next.handsPlayed}` })
+    } else {
+      after = next
+    }
+    await this.writeState(after)
+
+    const live = after.engine
+    if (live && live.street !== "showdown" && live.to_act !== null) {
+      const doIdx = engineSeatToDoSeat(after, live.to_act)
+      const seat = after.seats[doIdx]
+      if (seat?.kind === "bot") {
+        await this.ctx.storage.setAlarm(Date.now() + BOT_ACT_DELAY_MS)
+      }
+    }
   }
 
   async readState(): Promise<DOState> {

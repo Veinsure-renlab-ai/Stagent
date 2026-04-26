@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest"
+import { env, runInDurableObject } from "cloudflare:test"
 import { startHand, advanceBotsOnly } from "../src/game-loop.js"
+import type { TableDO } from "../src/do-table.js"
 import type { DOState, Seat } from "../src/state.js"
 import { STARTING_CHIPS } from "../src/config.js"
 
@@ -45,5 +47,21 @@ describe("game loop", () => {
         expect(acting.agent_id).toContain("User")
       }
     }
+  })
+})
+
+describe("alarm-driven advance", () => {
+  it("ticking demo table produces hands", async () => {
+    const stub = env.TABLE.get(env.TABLE.idFromName("alarm-demo"))
+    await stub.fetch("http://edge/c/alarm-demo/__init", { method: "POST" })
+    await stub.fetch("http://edge/c/alarm-demo/__startHand", { method: "POST" })
+
+    for (let i = 0; i < 30; i++) {
+      await stub.fetch("http://edge/c/alarm-demo/__tick", { method: "POST" })
+    }
+    await runInDurableObject(stub, async (obj: TableDO) => {
+      const s = await obj.readState()
+      expect(s.handsPlayed).toBeGreaterThanOrEqual(1)
+    })
   })
 })
