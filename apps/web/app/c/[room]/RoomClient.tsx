@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { TableView } from "@/components/TableView"
-import { ActionLog } from "@/components/ActionLog"
+import { RightColumn } from "@/components/right-column/RightColumn"
 import { openRoomSocket, type GameEvent, type WsClient } from "@/lib/ws-client"
 
 const EDGE_URL = process.env.NEXT_PUBLIC_EDGE_URL ?? "http://localhost:8787"
@@ -22,8 +22,7 @@ export function RoomClient({ room }: Props) {
       if (e.type === "snapshot") {
         setSnapshot(e.state)
         setConnected(true)
-      } else if (e.type === "seat_update" && snapshot) {
-        // best-effort live seat update — full snapshot will arrive on reconnect
+      } else if (e.type === "seat_update") {
         setSnapshot((prev: any) => {
           if (!prev) return prev
           const seats = [...prev.seats]
@@ -44,30 +43,18 @@ export function RoomClient({ room }: Props) {
   }, [room])
 
   return (
-    <>
-      <TableView room={room} snapshot={snapshot} />
-      <RightRailPortal>
-        <ActionLog events={events} />
-      </RightRailPortal>
-      {!connected && (
-        <div className="px-6 text-xs text-twitch-muted">
-          waiting for first snapshot from <code>{EDGE_URL}</code>…
-        </div>
-      )}
-    </>
+    <div className="grid grid-cols-[minmax(0,1fr)_320px] h-full min-h-0">
+      <div className="overflow-y-auto">
+        <TableView room={room} snapshot={snapshot} />
+        {!connected && (
+          <div className="px-6 text-xs text-text-muted">
+            waiting for first snapshot from <code>{EDGE_URL}</code>…
+          </div>
+        )}
+      </div>
+      <aside className="border-l border-border bg-bg-surface min-h-0">
+        <RightColumn events={events} />
+      </aside>
+    </div>
   )
-}
-
-function RightRailPortal({ children }: { children: React.ReactNode }) {
-  // Render into the layout's right-rail aside.
-  const [mounted, setMounted] = useState(false)
-  const [target, setTarget] = useState<Element | null>(null)
-  useEffect(() => {
-    setTarget(document.getElementById("right-rail"))
-    setMounted(true)
-  }, [])
-  if (!mounted || !target) return null
-  // Lazy-load to avoid SSR mismatch.
-  const { createPortal } = require("react-dom") as typeof import("react-dom")
-  return createPortal(children, target)
 }
