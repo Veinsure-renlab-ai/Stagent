@@ -5,3 +5,7 @@ dist/
 .env
 .env.local
 coverage/
+.gstack/
+.next/
+.wrangler/
+*.tsbuildinfo
