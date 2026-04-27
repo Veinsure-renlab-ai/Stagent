@@ -26,6 +26,17 @@ export async function handleFollow(req: Request, env: Env, name: string): Promis
   return Response.json({ ok: true }, { status: 201 })
 }
 
-export async function handleUnfollow(_req: Request, _env: Env, _name: string): Promise<Response> {
-  return new Response(null, { status: 501 })  // stub — replaced in Task 3
+export async function handleUnfollow(req: Request, env: Env, name: string): Promise<Response> {
+  const session = await requireSession(req, env)
+  if (session instanceof Response) return session
+
+  const db = getDb(env)
+  const targetRows = await db.select({ id: users.id })
+    .from(users).where(eq(users.displayName, name)).limit(1)
+  const target = targetRows[0]
+  if (!target) return new Response(null, { status: 204 })  // idempotent
+
+  await db.delete(follows)
+    .where(and(eq(follows.followerId, session.id), eq(follows.followeeId, target.id)))
+  return new Response(null, { status: 204 })
 }

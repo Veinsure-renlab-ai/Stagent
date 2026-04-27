@@ -49,3 +49,45 @@ describe("POST /api/users/[name]/follow", () => {
     expect(r2.status).toBe(200)
   })
 })
+
+describe("DELETE /api/users/[name]/follow", () => {
+  it("401 when not logged in", async () => {
+    const res = await SELF.fetch("https://edge/api/users/anyone/follow", { method: "DELETE" })
+    expect(res.status).toBe(401)
+  })
+
+  it("204 even when follow does not exist (idempotent)", async () => {
+    const me = await registerAndCookie()
+    const them = await registerAndCookie()
+    const res = await SELF.fetch(`https://edge/api/users/${them.name}/follow`, {
+      method: "DELETE", headers: { Cookie: me.cookie },
+    })
+    expect(res.status).toBe(204)
+  })
+
+  it("204 and removes existing follow", async () => {
+    const me = await registerAndCookie()
+    const them = await registerAndCookie()
+    await SELF.fetch(`https://edge/api/users/${them.name}/follow`, {
+      method: "POST", headers: { Cookie: me.cookie },
+    })
+    const r = await SELF.fetch(`https://edge/api/users/${them.name}/follow`, {
+      method: "DELETE", headers: { Cookie: me.cookie },
+    })
+    expect(r.status).toBe(204)
+
+    // re-follow should now succeed with 201 (proves the row was actually deleted)
+    const r2 = await SELF.fetch(`https://edge/api/users/${them.name}/follow`, {
+      method: "POST", headers: { Cookie: me.cookie },
+    })
+    expect(r2.status).toBe(201)
+  })
+
+  it("204 when followee does not exist (idempotent)", async () => {
+    const me = await registerAndCookie()
+    const res = await SELF.fetch("https://edge/api/users/no-such-user/follow", {
+      method: "DELETE", headers: { Cookie: me.cookie },
+    })
+    expect(res.status).toBe(204)
+  })
+})
