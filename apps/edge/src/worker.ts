@@ -62,6 +62,14 @@ export default {
       return withCors(new Response("not found", { status: 404 }))
     }
 
+    if (parts[0] === "api" && parts[1] === "replays") {
+      const mod = await import("./replays-api.js")
+      if (parts.length === 2 && req.method === "POST") return withCors(await mod.handleUploadReplay(req, env))
+      if (parts.length === 3 && req.method === "GET")  return withCors(await mod.handleGetReplay(req, env, parts[2]!))
+      if (parts.length === 3 && req.method === "DELETE") return withCors(await mod.handleDeleteReplay(req, env, parts[2]!))
+      return withCors(new Response("not found", { status: 404 }))
+    }
+
     if (parts[0] === "api" && parts[1] === "tables" && req.method === "POST") {
       const { handleCreateTable } = await import("./tables-api.js")
       return withCors(await handleCreateTable(req, env))
