@@ -62,6 +62,11 @@ export default {
       return withCors(new Response("not found", { status: 404 }))
     }
 
+    if (parts[0] === "api" && parts[1] === "users" && parts.length === 3 && req.method === "GET") {
+      const { handleGetUser } = await import("./users-api.js")
+      return withCors(await handleGetUser(req, env, decodeURIComponent(parts[2]!)))
+    }
+
     if (parts[0] === "api" && parts[1] === "replays") {
       const mod = await import("./replays-api.js")
       if (parts.length === 2 && req.method === "POST") return withCors(await mod.handleUploadReplay(req, env))
