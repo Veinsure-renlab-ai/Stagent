@@ -10,3 +10,13 @@ class_name = "TableDO"
 [[migrations]]
 tag = "v1"
 new_classes = ["TableDO"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "stagent-dev"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "src/db/migrations"
+
+[[kv_namespaces]]
+binding = "PRESENCE"
+id = "00000000000000000000000000000000"
