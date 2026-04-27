@@ -7,6 +7,7 @@ import { handleMcpRequest } from "./mcp-handler.js"
 import { actInput, sayInput, sitDownInput, thinkInput } from "./mcp-schemas.js"
 import { TexasHoldemModule } from "@stagent/texas-holdem"
 import type { AgentContext } from "./auth/bearer.js"
+import { putPresence, deletePresence } from "./presence.js"
 
 const STATE_KEY = "state"
 
@@ -105,6 +106,9 @@ export class TableDO {
       if (!seat || seat.kind !== "agent") continue
       if (now - seat.lastSeenMs < AGENT_GRACE_MS) continue
       changed = true
+      if (seat.userId && seat.agentId) {
+        await deletePresence(this.env.PRESENCE, seat.userId, seat.agentId)
+      }
       if (s.kind === "demo") {
         next.seats[i] = { kind: "empty" }
         broadcastEvent(this.ctx, { type: "seat_update", seat: i, kind: "empty" })
@@ -151,6 +155,14 @@ export class TableDO {
     }
     await this.writeState(after)
 
+    for (const seat of after.seats) {
+      if (seat.kind === "agent" && seat.userId && seat.agentId) {
+        await putPresence(this.env.PRESENCE, seat.userId, seat.agentId, {
+          room: after.room, sinceTs: seat.lastSeenMs, agentName: seat.name,
+        })
+      }
+    }
+
     const live = after.engine
     if (live && live.street !== "showdown" && live.to_act !== null) {
       const doIdx = engineSeatToDoSeat(after, live.to_act)
@@ -194,6 +206,12 @@ export class TableDO {
       next.lastActivityMs = Date.now()
       await this.writeState(next)
       broadcastEvent(this.ctx, { type: "seat_update", seat: openIdx, kind: "agent", name: displayName })
+
+      if (agent) {
+        await putPresence(this.env.PRESENCE, agent.userId, agent.agentId, {
+          room: s.room, sinceTs: Date.now(), agentName: agent.name,
+        })
+      }
 
       const seated = next.seats.filter(x => x.kind !== "empty").length
       if (seated >= 2 && !next.engine) {
