@@ -161,3 +161,23 @@ export async function deleteReplay(id: string) {
 }
 
 export { HttpError }
+
+// ========== Sidebar (server-side use only) ==========
+
+export interface SidebarFollowedItem {
+  display_name: string
+  avatar_url: string | null
+  is_live: boolean
+}
+
+export async function listFollowedForSidebar(cookieHeader: string | null): Promise<SidebarFollowedItem[]> {
+  if (!cookieHeader) return []
+  const url = process.env.NEXT_PUBLIC_EDGE_URL ?? "http://localhost:8787"
+  const res = await fetch(`${url}/api/me/following`, {
+    headers: { Cookie: cookieHeader },
+    cache: "no-store",
+  })
+  if (!res.ok) return []
+  const body = await res.json() as { items: SidebarFollowedItem[] }
+  return body.items
+}

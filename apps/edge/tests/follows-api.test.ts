@@ -91,3 +91,24 @@ describe("DELETE /api/users/[name]/follow", () => {
     expect(res.status).toBe(204)
   })
 })
+
+describe("GET /api/me/following", () => {
+  it("401 when anon", async () => {
+    const res = await SELF.fetch("https://edge/api/me/following")
+    expect(res.status).toBe(401)
+  })
+
+  it("returns followed users with is_live=false when no presence", async () => {
+    const me = await registerAndCookie()
+    const them = await registerAndCookie()
+    await SELF.fetch(`https://edge/api/users/${them.name}/follow`, {
+      method: "POST", headers: { Cookie: me.cookie },
+    })
+    const res = await SELF.fetch("https://edge/api/me/following", { headers: { Cookie: me.cookie } })
+    expect(res.status).toBe(200)
+    const body = await res.json<{ items: Array<{ display_name: string; is_live: boolean }> }>()
+    expect(body.items).toHaveLength(1)
+    expect(body.items[0]!.display_name).toBe(them.name)
+    expect(body.items[0]!.is_live).toBe(false)
+  })
+})

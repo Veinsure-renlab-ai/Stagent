@@ -51,6 +51,11 @@ export default {
       return withCors(new Response("not found", { status: 404 }))
     }
 
+    if (parts[0] === "api" && parts[1] === "me" && parts[2] === "following" && parts.length === 3 && req.method === "GET") {
+      const { handleListMyFollowing } = await import("./follows-api.js")
+      return withCors(await handleListMyFollowing(req, env))
+    }
+
     if (parts[0] === "api" && parts[1] === "me" && parts[2] === "agents") {
       const mod = await import("./agents-api.js")
       if (parts.length === 3 && req.method === "GET")  return withCors(await mod.handleListAgents(req, env))
