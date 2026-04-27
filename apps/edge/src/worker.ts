@@ -4,13 +4,16 @@ const ROOM_RE = /^[a-z0-9-]{1,64}$/
 
 export interface Env {
   TABLE: DurableObjectNamespace
+  DB: D1Database
+  PRESENCE: KVNamespace
 }
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Mcp-Session-Id, X-Owner-Token",
-  "Access-Control-Expose-Headers": "Mcp-Session-Id",
+  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Mcp-Session-Id, X-Owner-Token, Cookie, Authorization",
+  "Access-Control-Allow-Credentials": "true",
+  "Access-Control-Expose-Headers": "Mcp-Session-Id, Set-Cookie",
   "Access-Control-Max-Age": "86400",
 }
 
@@ -37,6 +40,15 @@ export default {
       // WS upgrade response (101) must not be wrapped — webSocket handle is lost.
       if (res.status === 101) return res
       return withCors(res)
+    }
+
+    if (parts[0] === "api" && parts[1] === "auth") {
+      const { handleRegister, handleLogin, handleLogout, handleMe } = await import("./auth-api.js")
+      if (parts[2] === "register" && req.method === "POST") return withCors(await handleRegister(req, env))
+      if (parts[2] === "login"    && req.method === "POST") return withCors(await handleLogin(req, env))
+      if (parts[2] === "logout"   && req.method === "POST") return withCors(await handleLogout(req, env))
+      if (parts[2] === "me"       && req.method === "GET")  return withCors(await handleMe(req, env))
+      return withCors(new Response("not found", { status: 404 }))
     }
 
     if (parts[0] === "api" && parts[1] === "tables" && req.method === "POST") {
